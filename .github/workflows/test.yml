@@ -20,4 +20,4 @@ jobs:
           distribution: 'temurin'
 
       - name: Build and run tests
-        run: mvn clean test
+        run: mvn -B package --file pom.xml
