@@ -7,6 +7,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.net.URLEncoder;
 
 public class JiraClient {
 
@@ -56,7 +57,6 @@ public class JiraClient {
 
     public static void transitionStatus(String issueKey, String transitionName) {
         try {
-            // Step 1: Get available transitions
             HttpURLConnection conn = createConnection(
                     JIRA_BASE_URL + "/rest/api/3/issue/" + issueKey + "/transitions", "GET"
             );
@@ -70,7 +70,6 @@ public class JiraClient {
                 return;
             }
 
-            // Step 2: Perform the transition
             String payload = String.format("{\"transition\":{\"id\":\"%s\"}}", transitionId);
             HttpURLConnection transConn = createConnection(
                     JIRA_BASE_URL + "/rest/api/3/issue/" + issueKey + "/transitions", "POST"
@@ -79,7 +78,7 @@ public class JiraClient {
 
             int code = transConn.getResponseCode();
             if (code == 204) {
-                System.out.println("Transitioned " + issueKey + " → '" + transitionName + "'");
+                System.out.println("Transitioned " + issueKey + " -> '" + transitionName + "'");
             } else {
                 System.err.println("Transition failed. Code: " + code);
             }
@@ -108,6 +107,132 @@ public class JiraClient {
         return null;
     }
 
+    // NEW: Create or update bug (call this instead of createBug)
+    public static String createOrUpdateBug(String testName, String failureDetails) {
+        String existingBugKey = searchExistingBug(testName);
+
+        if (existingBugKey != null) {
+            System.out.println("Updating existing bug: " + existingBugKey);
+            updateBug(existingBugKey, testName, failureDetails);
+            addComment(existingBugKey, "New failure at " + new java.util.Date() + ": " + failureDetails);
+            return existingBugKey;
+        } else {
+            System.out.println("Creating new bug for: " + testName);
+            return createBug(testName, failureDetails);
+        }
+    }
+
+    public static String searchExistingBug(String testName) {
+        try {
+            String jql = "project=" + PROJECT_KEY + " AND summary ~ \"" + escapeJson(testName) + "\" AND issuetype=Bug AND status NOT IN (Done, Closed, Resolved)";
+            String encodedJql = URLEncoder.encode(jql, "UTF-8");
+
+            HttpURLConnection conn = createConnection(
+                    JIRA_BASE_URL + "/rest/api/3/search?jql=" + encodedJql + "&maxResults=1",
+                    "GET"
+            );
+
+            int code = conn.getResponseCode();
+            if (code == 200) {
+                String response = readResponse(conn);
+                if (response.contains("\"total\":") && !response.contains("\"total\":0")) {
+                    String issueKey = extractIssueKeyFromSearch(response);
+                    if (issueKey != null && !issueKey.isEmpty()) {
+                        System.out.println("Found existing bug: " + issueKey);
+                        return issueKey;
+                    }
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error searching for bug: " + e.getMessage());
+        }
+        return null;
+    }
+
+    public static String updateBug(String issueKey, String summary, String additionalDescription) {
+        try {
+            String existingIssueJson = getIssue(issueKey);
+            String existingDesc = extractDescriptionFromJson(existingIssueJson);
+
+            String timestamp = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss").format(new java.util.Date());
+            String updatedDesc = existingDesc + "\n\n--- NEW FAILURE at " + timestamp + " ---\n" + additionalDescription;
+
+            String jsonPayload = String.format(
+                    "{\"fields\":{" +
+                            "\"summary\":\"%s\"," +
+                            "\"description\":{" +
+                            "\"type\":\"doc\"," +
+                            "\"version\":1," +
+                            "\"content\":[{" +
+                            "\"type\":\"paragraph\"," +
+                            "\"content\":[{\"type\":\"text\",\"text\":\"%s\"}]" +
+                            "}]" +
+                            "}" +
+                            "}}",
+                    escapeJson(summary),
+                    escapeJson(updatedDesc)
+            );
+
+            HttpURLConnection conn = createConnection(
+                    JIRA_BASE_URL + "/rest/api/3/issue/" + issueKey,
+                    "PUT"
+            );
+            sendRequest(conn, jsonPayload);
+
+            int code = conn.getResponseCode();
+            if (code == 204) {
+                System.out.println("Updated existing bug: " + issueKey);
+                return issueKey;
+            } else {
+                System.err.println("Failed to update bug. Code: " + code);
+                if (conn.getErrorStream() != null) {
+                    String error = readErrorResponse(conn);
+                    System.err.println("Error details: " + error);
+                }
+            }
+        } catch (Exception e) {
+            System.err.println("Error updating bug: " + e.getMessage());
+            e.printStackTrace();
+        }
+        return null;
+    }
+
+    private static String extractDescriptionFromJson(String issueJson) {
+        if (issueJson == null || issueJson.isEmpty()) {
+            return "Initial failure logged";
+        }
+
+        String searchPattern = "\"description\":";
+        int descIndex = issueJson.indexOf(searchPattern);
+        if (descIndex == -1) {
+            return "No previous description";
+        }
+
+        int textIndex = issueJson.indexOf("\"text\":\"", descIndex);
+        if (textIndex != -1) {
+            textIndex += 8;
+            int endIndex = issueJson.indexOf("\"", textIndex);
+            if (endIndex != -1) {
+                return issueJson.substring(textIndex, endIndex).replace("\\n", "\n").replace("\\\"", "\"");
+            }
+        }
+
+        return "Previous failures logged in Jira";
+    }
+
+    private static String extractIssueKeyFromSearch(String jsonResponse) {
+        String searchKey = "\"key\":\"";
+        int startIndex = jsonResponse.indexOf(searchKey);
+        if (startIndex != -1) {
+            startIndex += searchKey.length();
+            int endIndex = jsonResponse.indexOf("\"", startIndex);
+            if (endIndex != -1) {
+                return jsonResponse.substring(startIndex, endIndex);
+            }
+        }
+        return null;
+    }
+
     private static String createIssue(String summary, String description, String issueType) {
         try {
             String jsonPayload = String.format(
@@ -130,7 +255,7 @@ public class JiraClient {
                     issueType
             );
 
-            System.out.println("📤 Creating " + issueType + ": " + summary);
+            System.out.println("Creating " + issueType + ": " + summary);
 
             HttpURLConnection conn = createConnection(
                     JIRA_BASE_URL + "/rest/api/3/issue", "POST"
@@ -162,7 +287,6 @@ public class JiraClient {
             return null;
         }
     }
-
 
     private static HttpURLConnection createConnection(String urlString, String method) throws Exception {
         URL url = new URL(urlString);
@@ -242,7 +366,7 @@ public class JiraClient {
     public static void main(String[] args) {
         System.out.println("Testing Jira Connection...");
 
-        String issueKey = createTask(
+        String issueKey = createOrUpdateBug(
                 "Test from Selenium Framework",
                 "This is a test issue created from Java. If you see this in Jira, the integration works!"
         );
@@ -256,4 +380,3 @@ public class JiraClient {
         }
     }
 }
-
