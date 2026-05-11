@@ -6,6 +6,9 @@ import io.cucumber.java.en.Given;
 import io.cucumber.java.en.Then;
 import io.cucumber.java.en.When;
 import org.openqa.selenium.WebDriver;
+import org.openqa.selenium.support.ui.WebDriverWait;
+
+import java.time.Duration;
 
 import static Elements.objMbhoni.*;
 
@@ -32,11 +35,14 @@ public class MyStepdefs {
 
     @When("User clicks the Home button")
     public void userClicksTheHomeButton() {
+
         driver.findElement(homePage).click();
     }
 
     @Then("Welcome to my World page gets displayed")
     public void welcomeToMyWorldPageGetsDisplayed() {
+        WebDriverWait wait = new WebDriverWait(driver, Duration.ofSeconds(10));
+
         driver.findElement(welcomeToMyWorld).isDisplayed();
     }
 
