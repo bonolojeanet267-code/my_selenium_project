@@ -2,7 +2,7 @@ name: Run Automation Tests
 
 on:
   push:
-    branches: [ "master" ]   # change to "main" if your repo uses main
+    branches: [ "master" ]
   workflow_dispatch:
 
 jobs:

@@ -13,7 +13,7 @@ public class JiraClient {
 
     private static final String JIRA_BASE_URL = "https://bonolojeanet267.atlassian.net";
     private static final String EMAIL         = "bonolojeanet267@gmail.com";
-    private static final String API_TOKEN     = "ATATT3xFfGF08Qaksp_0jAQOKp_QukMG85iRbuvvoFi3nTJh5dic6HghBPUVOUWES254-G4H9TVm7T2Xa1gGFNTceSDFjCZJ70LBjDfGjJn3M6COa27WVrN9isp5WHucHdePtFzAMIr75-JAm_nH_-qIK5q40PyhqNEmuVS_4He_s6uIX3VbdPE=00221625";
+    private static final String API_TOKEN     = "ATATT3xFfGF0Z4ws1eoYlHiOFAfUlbXw82tMTL9-Sp310Utmr_xxzXvhS1PajQSI73ORSAYcf3C1ahbGkWjLEA6b0lmQwzizdC5v5mIvwShZPlbePXb0S7JqMPlFoHCUp74LTB0lMSBlvGI1-sROeiJdXGuJ3A4iaa0phn00cGCKzQJu5pC8TJo=10AD3BA0-G4H9TVm7T2Xa1gGFNTceSDFjCZJ70LBjDfGjJn3M6COa27WVrN9isp5WHucHdePtFzAMIr75-JAm_nH_-qIK5q40PyhqNEmuVS_4He_s6uIX3VbdPE=00221625";
     private static final String PROJECT_KEY   = "QA";
 
     private static String getAuthHeader() {
